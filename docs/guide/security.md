@@ -7,8 +7,9 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 - The runtime is bound to one explicit `WEB_HARNESS_PROJECT_ROOT`.
 - File paths and process working directories are resolved against that root and traversal is rejected.
 - Existing paths are canonicalized before use, so a symlink inside the repository cannot silently redirect reads, writes, or process working directories outside the configured root.
-- Remote runner connections require a bearer token.
-- The default `change-me` token is accepted only from loopback connections.
+- Runtime status, REST tool calls, MCP requests, remote runner connections, and the Web UI event socket require the configured token.
+- The browser console keeps its token in `sessionStorage` only. WebSocket authentication is carried in an `auth.<base64url-token>` subprotocol because browser WebSocket APIs cannot set an `Authorization` header.
+- The default `change-me` token is accepted only from loopback connections, including IPv4-mapped loopback addresses.
 - `process.run` uses an argv API rather than an implicit shell.
 - Request sizes, file sizes, process output, and execution time are bounded.
 

@@ -1,19 +1,20 @@
 import { createReadStream } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { Socket } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  PROTOCOL_VERSION,
   decodeFrame,
   encodeFrame,
   isToolName,
+  PROTOCOL_VERSION,
   type RuntimeStatus,
   type UiEvent,
   type WireFrame,
 } from '@web-harness/protocol'
-import { WebSocketServer, type RawData, type WebSocket } from 'ws'
-import { isAuthorized } from './auth.js'
+import WebSocket, { type RawData, WebSocketServer } from 'ws'
+import { isAuthorized, isUiWebSocketAuthorized } from './auth.js'
 import type { RuntimeConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
 import { createMcpHttpHandler, type McpHttpHandler } from './mcp.js'
@@ -34,8 +35,16 @@ export class HarnessServer {
       else response.destroy(error instanceof Error ? error : new Error(message))
     })
   })
-  private readonly runnerWss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 4 * 1024 * 1024 })
-  private readonly uiWss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 256 * 1024 })
+  private readonly runnerWss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+    maxPayload: 4 * 1024 * 1024,
+  })
+  private readonly uiWss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+    maxPayload: 256 * 1024,
+  })
 
   constructor(private readonly config: RuntimeConfig) {
     this.localRuntime = new LocalToolRuntime(config.projectRoot)
@@ -58,17 +67,22 @@ export class HarnessServer {
 
   private configureUpgrade(): void {
     this.server.on('upgrade', (request, socket, head) => {
-      socket.setNoDelay(true)
-      socket.setKeepAlive(true, 15_000)
+      const tcpSocket = socket as Socket
+      tcpSocket.setNoDelay(true)
+      tcpSocket.setKeepAlive(true, 15_000)
 
       const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
-      if (url.pathname === '/ws/ui') {
-        this.uiWss.handleUpgrade(request, socket, head, (ws) => this.uiWss.emit('connection', ws, request))
+      if (url.pathname === '/ws/ui' && isUiWebSocketAuthorized(request, this.config.token)) {
+        this.uiWss.handleUpgrade(request, socket, head, (ws) =>
+          this.uiWss.emit('connection', ws, request),
+        )
         return
       }
 
       if (url.pathname === '/ws/runner' && isAuthorized(request, this.config.token)) {
-        this.runnerWss.handleUpgrade(request, socket, head, (ws) => this.runnerWss.emit('connection', ws, request))
+        this.runnerWss.handleUpgrade(request, socket, head, (ws) =>
+          this.runnerWss.emit('connection', ws, request),
+        )
         return
       }
 
@@ -107,13 +121,24 @@ export class HarnessServer {
             }
             registered = true
             this.remoteBridge.attach(socket, frame.runnerId, frame.projectRoot)
-            const welcome: WireFrame = { type: 'runner.welcome', protocolVersion: PROTOCOL_VERSION, serverTime: Date.now() }
+            const welcome: WireFrame = {
+              type: 'runner.welcome',
+              protocolVersion: PROTOCOL_VERSION,
+              serverTime: Date.now(),
+            }
             socket.send(encodeFrame(welcome), { binary: true })
-            this.broadcast({ type: 'ui.event', event: 'connected', at: Date.now(), detail: { runnerId: frame.runnerId } })
+            this.broadcast({
+              type: 'ui.event',
+              event: 'connected',
+              at: Date.now(),
+              detail: { runnerId: frame.runnerId },
+            })
+            this.broadcastStatus()
             return
           }
 
-          if (frame.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
+          if (frame.type === 'ping')
+            socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
         } catch {
           socket.close(1002, 'invalid protocol frame')
         }
@@ -123,7 +148,10 @@ export class HarnessServer {
         clearInterval(heartbeat)
         if (registered) {
           const detached = this.remoteBridge.detach(socket)
-          if (detached) this.broadcast({ type: 'ui.event', event: 'disconnected', at: Date.now() })
+          if (detached) {
+            this.broadcast({ type: 'ui.event', event: 'disconnected', at: Date.now() })
+            this.broadcastStatus()
+          }
         }
       })
     })
@@ -132,9 +160,20 @@ export class HarnessServer {
   private configureUiWebSocket(): void {
     this.uiWss.on('connection', (socket) => {
       this.uiSockets.add(socket)
-      socket.send(JSON.stringify({ type: 'status', payload: this.status() }))
+      socket.send(this.statusPayload())
       socket.on('close', () => this.uiSockets.delete(socket))
     })
+  }
+
+  private broadcastStatus(): void {
+    const payload = this.statusPayload()
+    for (const socket of this.uiSockets) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(payload)
+    }
+  }
+
+  private statusPayload(): string {
+    return JSON.stringify({ type: 'status', payload: this.status() })
   }
 
   private broadcast(event: UiEvent): void {
@@ -150,7 +189,10 @@ export class HarnessServer {
       protocolVersion: PROTOCOL_VERSION,
       mode: this.config.mode,
       connected: this.config.mode === 'local' || Boolean(this.remoteBridge.status),
-      projectRoot: this.config.projectRoot,
+      projectRoot:
+        this.config.mode === 'remote'
+          ? (this.remoteBridge.status?.projectRoot ?? '')
+          : this.config.projectRoot,
       startedAt,
       ...(this.remoteBridge.status ? { runner: this.remoteBridge.status } : {}),
     }
@@ -164,6 +206,9 @@ export class HarnessServer {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
 
     if (request.method === 'GET' && url.pathname === '/api/status') {
+      if (!isAuthorized(request, this.config.token)) {
+        return this.json(response, 401, { error: 'unauthorized' })
+      }
       return this.json(response, 200, this.status())
     }
 
@@ -175,8 +220,13 @@ export class HarnessServer {
     }
 
     if (request.method === 'POST' && url.pathname.startsWith('/api/tools/')) {
-      if (!isAuthorized(request, this.config.token)) return this.json(response, 401, { error: 'unauthorized' })
-      return this.handleToolRequest(request, response, decodeURIComponent(url.pathname.slice('/api/tools/'.length)))
+      if (!isAuthorized(request, this.config.token))
+        return this.json(response, 401, { error: 'unauthorized' })
+      return this.handleToolRequest(
+        request,
+        response,
+        decodeURIComponent(url.pathname.slice('/api/tools/'.length)),
+      )
     }
 
     if (request.method === 'GET') {
@@ -187,7 +237,11 @@ export class HarnessServer {
     this.json(response, 404, { error: 'not_found' })
   }
 
-  private async handleToolRequest(request: IncomingMessage, response: ServerResponse, rawTool: string): Promise<void> {
+  private async handleToolRequest(
+    request: IncomingMessage,
+    response: ServerResponse,
+    rawTool: string,
+  ): Promise<void> {
     if (!isToolName(rawTool)) return this.json(response, 404, { error: 'unknown_tool' })
 
     const tool = rawTool
@@ -251,7 +305,8 @@ export class HarnessServer {
     }
     if (chunks.length === 0) return {}
     const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('JSON body must be an object')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('JSON body must be an object')
     return parsed as Record<string, unknown>
   }
 
@@ -297,7 +352,10 @@ export class HarnessServer {
     }
     response.statusCode = 200
     response.setHeader('Content-Type', types[ext] ?? 'application/octet-stream')
-    response.setHeader('Cache-Control', ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable')
+    response.setHeader(
+      'Cache-Control',
+      ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+    )
     createReadStream(file).pipe(response)
     return true
   }
@@ -316,7 +374,7 @@ function toBytes(raw: RawData): Uint8Array {
     return new Uint8Array(joined.buffer, joined.byteOffset, joined.byteLength)
   }
   if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
-  return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  throw new TypeError('Unsupported WebSocket payload')
 }
 
 function elapsedMs(started: number): number {

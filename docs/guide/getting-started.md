@@ -31,7 +31,7 @@ pnpm dev
 - MCP endpoint: `http://127.0.0.1:4141/mcp`
 - Web console: `http://127.0.0.1:4142`
 
-MCP requests use the configured token as a bearer credential. See [MCP clients](./mcp.md) for the tool map and protocol notes.
+MCP and REST requests use the configured token as a bearer credential. Enter the same token in the Web console; it is retained only for the current browser session. See [MCP clients](./mcp.md) for the tool map and protocol notes.
 
 ## Production build
 
