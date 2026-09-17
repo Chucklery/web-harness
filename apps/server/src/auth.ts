@@ -32,8 +32,25 @@ export function isUiWebSocketAuthorized(request: IncomingMessage, expectedToken:
 
 function usesLoopbackDefault(request: IncomingMessage, expectedToken: string): boolean {
   if (expectedToken !== 'change-me') return false
+  if (hasForwardingHeaders(request)) return false
+
   const address = request.socket.remoteAddress
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+  if (address !== '127.0.0.1' && address !== '::1' && address !== '::ffff:127.0.0.1') {
+    return false
+  }
+
+  const host = request.headers.host?.toLowerCase()
+  if (!host) return false
+  return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host)
+}
+
+function hasForwardingHeaders(request: IncomingMessage): boolean {
+  return Boolean(
+    request.headers.forwarded ||
+      request.headers['x-forwarded-for'] ||
+      request.headers['x-forwarded-host'] ||
+      request.headers['x-forwarded-proto'],
+  )
 }
 
 function tokenEquals(receivedToken: string, expectedToken: string): boolean {

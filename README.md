@@ -40,6 +40,14 @@ Open `http://127.0.0.1:4142` for the web console.
 
 MCP clients connect to `http://127.0.0.1:4141/mcp` with `Authorization: Bearer <WEB_HARNESS_TOKEN>`.
 
+To temporarily expose the current repository to ChatGPT through a Cloudflare Quick Tunnel:
+
+```bash
+pnpm share
+```
+
+`share` generates a fresh temporary credential, keeps the runtime loopback-only, starts `cloudflared`, and prints the HTTPS `/mcp` URL plus the credential to enter in ChatGPT. Install `cloudflared` first or set `WEB_HARNESS_CLOUDFLARED_BIN` to its path. Ctrl-C destroys the temporary runtime and tunnel.
+
 ## Included tools
 
 - `project.info`

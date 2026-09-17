@@ -9,7 +9,8 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 - Existing paths are canonicalized before use, so a symlink inside the repository cannot silently redirect reads, writes, or process working directories outside the configured root.
 - Runtime status, REST tool calls, MCP requests, remote runner connections, and the Web UI event socket require the configured token.
 - The browser console keeps its token in `sessionStorage` only. For the WebSocket handshake it offers a fixed `web-harness.v1` subprotocol plus an `auth.<base64url-token>` credential; the server selects and echoes only the fixed protocol, so the credential is not reflected in the handshake response.
-- The default `change-me` token is accepted only from loopback connections, including IPv4-mapped loopback addresses.
+- The default `change-me` token is accepted only for direct loopback requests whose `Host` is also loopback. Requests carrying standard forwarding headers are never granted this development-only bypass, which prevents a localhost tunnel/proxy from inheriting it accidentally.
+- `pnpm share` never uses the default development credential. It generates a fresh random bearer credential for each foreground share and keeps the runtime listener on loopback.
 - `process.run` uses an argv API rather than an implicit shell.
 - Request sizes, file sizes, process output, and execution time are bounded.
 
@@ -21,6 +22,7 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 - Register only repositories that the AI client is expected to access.
 - Keep Git enabled so every file change is reviewable.
 - Do not expose the server directly to the public internet without authentication and TLS.
+- Prefer the temporary `share` flow over exposing port 4141 directly. The public Cloudflare endpoint terminates TLS while the Web Harness listener remains bound to `127.0.0.1`.
 
 ## Not yet included
 

@@ -33,6 +33,24 @@ pnpm dev
 
 MCP and REST requests use the configured token as a bearer credential. Enter the same token in the Web console; it is retained only for the current browser session. See [MCP clients](./mcp.md) for the tool map and protocol notes.
 
+## Temporary ChatGPT share
+
+For a short-lived connection from ChatGPT to the current repository, install `cloudflared` and run:
+
+```bash
+pnpm share
+```
+
+The command generates a random temporary bearer credential, starts Web Harness on loopback, opens a Cloudflare Quick Tunnel, and prints the public HTTPS `/mcp` URL. In ChatGPT Developer Mode, create a custom MCP app, paste that URL, choose Access token / API key, paste the printed credential, then Scan Tools.
+
+The share exists only while the foreground command is running. Ctrl-C stops both the local runtime and the tunnel. Use `WEB_HARNESS_CLOUDFLARED_BIN=/path/to/cloudflared` when the binary is not on `PATH`.
+
+For local smoke testing without a tunnel:
+
+```bash
+pnpm share -- --tunnel none
+```
+
 ## Production build
 
 ```bash

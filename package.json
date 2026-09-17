@@ -22,6 +22,7 @@
     "docs:dev": "vitepress docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
+    "share": "node scripts/share.mjs",
     "bench:http": "node scripts/bench-http.mjs",
     "bench:tools": "node scripts/bench-tools.mjs",
     "bench:remote": "node scripts/bench-remote.mjs"

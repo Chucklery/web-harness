@@ -10,9 +10,21 @@ function request(headers: IncomingMessage['headers'], remoteAddress = '203.0.113
   } as unknown as IncomingMessage
 }
 
-test('default development token is accepted only from loopback', () => {
-  assert.equal(isAuthorized(request({}, '127.0.0.1'), 'change-me'), true)
-  assert.equal(isAuthorized(request({}, '::ffff:127.0.0.1'), 'change-me'), true)
+test('default development token is accepted only for direct loopback requests', () => {
+  assert.equal(isAuthorized(request({ host: 'localhost:4141' }, '127.0.0.1'), 'change-me'), true)
+  assert.equal(
+    isAuthorized(request({ host: '127.0.0.1:4141' }, '::ffff:127.0.0.1'), 'change-me'),
+    true,
+  )
+  assert.equal(isAuthorized(request({ host: '[::1]:4141' }, '::1'), 'change-me'), true)
+  assert.equal(isAuthorized(request({ host: 'example.com' }, '127.0.0.1'), 'change-me'), false)
+  assert.equal(
+    isAuthorized(
+      request({ host: 'localhost:4141', 'x-forwarded-for': '203.0.113.10' }, '127.0.0.1'),
+      'change-me',
+    ),
+    false,
+  )
   assert.equal(isAuthorized(request({}), 'change-me'), false)
 })
 
