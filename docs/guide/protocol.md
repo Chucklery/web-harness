@@ -39,3 +39,5 @@ Server replies:
 ```
 
 Every request receives exactly one `tool.result` frame unless the connection is lost. The server rejects mismatched protocol versions before registering the runner.
+
+Malformed MessagePack frames are rejected at the protocol boundary. If a runner reconnects with the same or a new runner id, the newer socket becomes authoritative and the previous socket is terminated so stale close/heartbeat events cannot detach the active runner.

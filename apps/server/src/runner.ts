@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { Socket } from 'node:net'
 import { PROTOCOL_VERSION, decodeFrame, encodeFrame, type ToolRequest, type ToolResult, type WireFrame } from '@web-harness/protocol'
-import WebSocket from 'ws'
+import WebSocket, { type RawData } from 'ws'
 import { loadConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
 
@@ -21,11 +20,13 @@ function connect(): void {
 
   socket.binaryType = 'arraybuffer'
 
+  socket.once('upgrade', (response) => {
+    response.socket.setNoDelay(true)
+    response.socket.setKeepAlive(true, 15_000)
+  })
+
   socket.on('open', () => {
     retryMs = 100
-    const transport = (socket as WebSocket & { _socket?: Socket })._socket
-    transport?.setNoDelay(true)
-    transport?.setKeepAlive(true, 15_000)
     const hello: WireFrame = {
       type: 'runner.hello',
       protocolVersion: PROTOCOL_VERSION,
@@ -37,14 +38,17 @@ function connect(): void {
 
   socket.on('message', async (raw, isBinary) => {
     if (!isBinary) return
-    const bytes = raw instanceof Buffer ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) : new Uint8Array(raw as ArrayBuffer)
-    const frame = decodeFrame(bytes)
-    if (frame.type === 'tool.request') await handleTool(socket, frame)
-    if (frame.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
+    try {
+      const frame = decodeFrame(toBytes(raw))
+      if (frame.type === 'tool.request') await handleTool(socket, frame)
+      if (frame.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
+    } catch {
+      socket.close(1002, 'invalid protocol frame')
+    }
   })
 
   socket.on('close', reconnect)
-  socket.on('error', () => socket.close())
+  socket.on('error', () => socket.terminate())
 }
 
 async function handleTool(socket: WebSocket, request: ToolRequest): Promise<void> {
@@ -76,6 +80,16 @@ function reconnect(): void {
   const delay = retryMs + jitter
   setTimeout(connect, delay).unref()
   retryMs = Math.min(retryMs * 2, 5_000)
+}
+
+function toBytes(raw: RawData): Uint8Array {
+  if (Buffer.isBuffer(raw)) return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  if (Array.isArray(raw)) {
+    const joined = Buffer.concat(raw)
+    return new Uint8Array(joined.buffer, joined.byteOffset, joined.byteLength)
+  }
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
+  return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
 }
 
 connect()

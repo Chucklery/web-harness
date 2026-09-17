@@ -7,12 +7,12 @@ import {
   PROTOCOL_VERSION,
   decodeFrame,
   encodeFrame,
+  isToolName,
   type RuntimeStatus,
-  type ToolName,
   type UiEvent,
   type WireFrame,
 } from '@web-harness/protocol'
-import { WebSocketServer, type WebSocket } from 'ws'
+import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import { isAuthorized } from './auth.js'
 import type { RuntimeConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
@@ -73,33 +73,50 @@ export class HarnessServer {
   private configureRunnerWebSocket(): void {
     this.runnerWss.on('connection', (socket) => {
       let registered = false
+      let alive = true
       socket.binaryType = 'arraybuffer'
+
+      const heartbeat = setInterval(() => {
+        if (!alive) return socket.terminate()
+        alive = false
+        socket.ping()
+      }, 10_000)
+      heartbeat.unref()
+
+      socket.on('pong', () => {
+        alive = true
+        if (registered) this.remoteBridge.touch(socket)
+      })
 
       socket.on('message', (raw, isBinary) => {
         if (!isBinary) return socket.close(1003, 'binary MessagePack frames required')
-        const bytes = raw instanceof Buffer ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) : new Uint8Array(raw as ArrayBuffer)
-        const frame = decodeFrame(bytes)
+        try {
+          const bytes = toBytes(raw)
+          const frame = registered ? this.remoteBridge.onFrame(socket, bytes) : decodeFrame(bytes)
 
-        if (!registered) {
-          if (frame.type !== 'runner.hello' || frame.protocolVersion !== PROTOCOL_VERSION) {
-            return socket.close(1002, 'protocol mismatch')
+          if (!registered) {
+            if (frame.type !== 'runner.hello' || frame.protocolVersion !== PROTOCOL_VERSION) {
+              return socket.close(1002, 'protocol mismatch')
+            }
+            registered = true
+            this.remoteBridge.attach(socket, frame.runnerId, frame.projectRoot)
+            const welcome: WireFrame = { type: 'runner.welcome', protocolVersion: PROTOCOL_VERSION, serverTime: Date.now() }
+            socket.send(encodeFrame(welcome), { binary: true })
+            this.broadcast({ type: 'ui.event', event: 'connected', at: Date.now(), detail: { runnerId: frame.runnerId } })
+            return
           }
-          registered = true
-          this.remoteBridge.attach(socket, frame.runnerId)
-          const welcome: WireFrame = { type: 'runner.welcome', protocolVersion: PROTOCOL_VERSION, serverTime: Date.now() }
-          socket.send(encodeFrame(welcome), { binary: true })
-          this.broadcast({ type: 'ui.event', event: 'connected', at: Date.now(), detail: { runnerId: frame.runnerId } })
-          return
-        }
 
-        const next = this.remoteBridge.onFrame(bytes)
-        if (next.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: next.at }), { binary: true })
+          if (frame.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
+        } catch {
+          socket.close(1002, 'invalid protocol frame')
+        }
       })
 
       socket.on('close', () => {
+        clearInterval(heartbeat)
         if (registered) {
-          this.remoteBridge.detach()
-          this.broadcast({ type: 'ui.event', event: 'disconnected', at: Date.now() })
+          const detached = this.remoteBridge.detach(socket)
+          if (detached) this.broadcast({ type: 'ui.event', event: 'disconnected', at: Date.now() })
         }
       })
     })
@@ -157,10 +174,9 @@ export class HarnessServer {
   }
 
   private async handleToolRequest(request: IncomingMessage, response: ServerResponse, rawTool: string): Promise<void> {
-    const allowed: ToolName[] = ['project.info', 'fs.list', 'fs.read', 'fs.write', 'git.status', 'git.diff', 'process.run']
-    if (!allowed.includes(rawTool as ToolName)) return this.json(response, 404, { error: 'unknown_tool' })
+    if (!isToolName(rawTool)) return this.json(response, 404, { error: 'unknown_tool' })
 
-    const tool = rawTool as ToolName
+    const tool = rawTool
     const started = performance.now()
     this.broadcast({ type: 'ui.event', event: 'tool.start', at: Date.now(), detail: { tool } })
 
@@ -245,4 +261,14 @@ export class HarnessServer {
     response.setHeader('Content-Type', 'application/json; charset=utf-8')
     response.end(JSON.stringify(body))
   }
+}
+
+function toBytes(raw: RawData): Uint8Array {
+  if (Buffer.isBuffer(raw)) return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  if (Array.isArray(raw)) {
+    const joined = Buffer.concat(raw)
+    return new Uint8Array(joined.buffer, joined.byteOffset, joined.byteLength)
+  }
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
+  return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
 }

@@ -12,33 +12,52 @@ export class RemoteRunnerBridge {
   private socket: WebSocket | undefined
   private readonly pending = new Map<string, PendingRequest>()
   private runnerId = ''
+  private projectRoot = ''
   private connectedAt = 0
   private lastSeenAt = 0
 
-  attach(socket: WebSocket, runnerId: string): void {
+  attach(socket: WebSocket, runnerId: string, projectRoot: string): void {
+    const previous = this.socket
     this.detach(new Error('Runner replaced by a newer connection'))
+    if (previous && previous !== socket) previous.terminate()
     this.socket = socket
     this.runnerId = runnerId
+    this.projectRoot = projectRoot
     this.connectedAt = Date.now()
     this.lastSeenAt = Date.now()
   }
 
-  detach(reason = new Error('Runner disconnected')): void {
+  detach(reason?: Error): boolean
+  detach(socket: WebSocket, reason?: Error): boolean
+  detach(socketOrReason?: WebSocket | Error, maybeReason?: Error): boolean {
+    const socket = socketOrReason instanceof Error ? undefined : socketOrReason
+    const reason = socketOrReason instanceof Error ? socketOrReason : maybeReason ?? new Error('Runner disconnected')
+    if (socket && socket !== this.socket) return false
+
     this.socket = undefined
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(reason)
     }
     this.pending.clear()
+    return true
   }
 
-  touch(): void {
+  touch(socket?: WebSocket): boolean {
+    if (socket && socket !== this.socket) return false
+    if (!this.socket) return false
     this.lastSeenAt = Date.now()
+    return true
   }
 
   get status() {
     if (!this.socket) return undefined
-    return { id: this.runnerId, connectedAt: this.connectedAt, lastSeenAt: this.lastSeenAt }
+    return {
+      id: this.runnerId,
+      projectRoot: this.projectRoot,
+      connectedAt: this.connectedAt,
+      lastSeenAt: this.lastSeenAt,
+    }
   }
 
   async execute(tool: ToolName, input: Record<string, unknown>): Promise<unknown> {
@@ -58,11 +77,37 @@ export class RemoteRunnerBridge {
       this.pending.set(id, { resolve, reject, timer })
     })
 
-    this.socket.send(encodeFrame(frame), { binary: true })
+    if (this.socket.bufferedAmount > 1024 * 1024) {
+      const pending = this.pending.get(id)
+      if (pending) {
+        clearTimeout(pending.timer)
+        this.pending.delete(id)
+      }
+      throw new Error('Remote runner transport is backpressured')
+    }
+
+    try {
+      this.socket.send(encodeFrame(frame), { binary: true }, (error) => {
+        if (!error) return
+        const pending = this.pending.get(id)
+        if (!pending) return
+        clearTimeout(pending.timer)
+        this.pending.delete(id)
+        pending.reject(error)
+      })
+    } catch (error) {
+      const pending = this.pending.get(id)
+      if (pending) {
+        clearTimeout(pending.timer)
+        this.pending.delete(id)
+        pending.reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
     return promise
   }
 
-  onFrame(data: ArrayBuffer | Uint8Array): WireFrame {
+  onFrame(socket: WebSocket, data: ArrayBuffer | Uint8Array): WireFrame {
+    if (socket !== this.socket) throw new Error('Frame came from a stale runner connection')
     const frame = decodeFrame(data)
     this.touch()
     if (frame.type === 'tool.result') this.resolve(frame)
