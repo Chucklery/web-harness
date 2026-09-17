@@ -6,6 +6,7 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 
 - The runtime is bound to one explicit `WEB_HARNESS_PROJECT_ROOT`.
 - File paths and process working directories are resolved against that root and traversal is rejected.
+- Existing paths are canonicalized before use, so a symlink inside the repository cannot silently redirect reads, writes, or process working directories outside the configured root.
 - Remote runner connections require a bearer token.
 - The default `change-me` token is accepted only from loopback connections.
 - `process.run` uses an argv API rather than an implicit shell.
@@ -22,4 +23,4 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 
 ## Not yet included
 
-The MVP does not claim multi-tenant isolation, sandboxing, OAuth, policy approvals, or secret redaction. Those require explicit threat-model-driven design rather than hidden defaults.
+The MVP does not claim multi-tenant isolation, sandboxing, OAuth, policy approvals, secret redaction, or protection from a hostile local process racing filesystem links between validation and use. Those require explicit threat-model-driven design rather than hidden defaults.

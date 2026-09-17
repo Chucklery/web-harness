@@ -3,12 +3,16 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { ToolName } from '@web-harness/protocol'
-import { resolveInsideRoot } from './path-policy.js'
+import { ProjectPathPolicy } from './path-policy.js'
 
 const execFileAsync = promisify(execFile)
 
 export class LocalToolRuntime {
-  public constructor(private readonly projectRoot: string) {}
+  private readonly paths: ProjectPathPolicy
+
+  public constructor(private readonly projectRoot: string) {
+    this.paths = new ProjectPathPolicy(projectRoot)
+  }
 
   async execute(tool: ToolName, input: Record<string, unknown>): Promise<unknown> {
     switch (tool) {
@@ -39,7 +43,7 @@ export class LocalToolRuntime {
   }
 
   private async list(requestedPath: string) {
-    const directory = resolveInsideRoot(this.projectRoot, requestedPath)
+    const directory = await this.paths.existing(requestedPath)
     const entries = await readdir(directory, { withFileTypes: true })
     return entries
       .filter((entry) => entry.name !== 'node_modules' && entry.name !== '.git')
@@ -52,11 +56,12 @@ export class LocalToolRuntime {
 
   private async read(requestedPath: string) {
     if (!requestedPath) throw new Error('path is required')
-    const file = resolveInsideRoot(this.projectRoot, requestedPath)
-    const content = await readFile(file, 'utf8')
-    if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) {
+    const file = await this.paths.existing(requestedPath)
+    const fileStat = await stat(file)
+    if (fileStat.size > 2 * 1024 * 1024) {
       throw new Error('File is larger than the 2 MiB read limit')
     }
+    const content = await readFile(file, 'utf8')
     return { path: requestedPath, content }
   }
 
@@ -65,7 +70,7 @@ export class LocalToolRuntime {
     if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) {
       throw new Error('Content is larger than the 2 MiB write limit')
     }
-    const file = resolveInsideRoot(this.projectRoot, requestedPath)
+    const file = await this.paths.writable(requestedPath)
     await writeFile(file, content, 'utf8')
     return { path: requestedPath, bytes: Buffer.byteLength(content, 'utf8') }
   }
@@ -86,8 +91,8 @@ export class LocalToolRuntime {
     if (!command) throw new Error('command is required')
 
     const args = Array.isArray(input.args) ? input.args.map(String) : []
-    const cwd = resolveInsideRoot(this.projectRoot, String(input.cwd ?? '.'))
-    const timeoutMs = Math.min(Math.max(Number(input.timeoutMs ?? 30_000), 100), 120_000)
+    const cwd = await this.paths.existing(String(input.cwd ?? '.'))
+    const timeoutMs = boundedTimeout(input.timeoutMs)
     const startedAt = performance.now()
 
     const { stdout, stderr } = await execFileAsync(command, args, {
@@ -112,4 +117,10 @@ export class LocalToolRuntime {
       durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
     }
   }
+}
+
+function boundedTimeout(value: unknown): number {
+  const parsed = Number(value ?? 30_000)
+  if (!Number.isFinite(parsed)) return 30_000
+  return Math.min(Math.max(Math.trunc(parsed), 100), 120_000)
 }
