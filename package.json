@@ -1,0 +1,33 @@
+{
+  "name": "web-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight TypeScript runtime and web console for connecting AI coding clients to local repositories with a low-latency transport.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @web-harness/server --filter @web-harness/web dev",
+    "dev:server": "pnpm --filter @web-harness/server dev",
+    "dev:web": "pnpm --filter @web-harness/web dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "docs:dev": "vitepress docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "bench:http": "node scripts/bench-http.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vitepress": "1.6.4"
+  }
+}

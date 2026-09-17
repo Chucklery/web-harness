@@ -1,0 +1,84 @@
+# Web Harness
+
+A lightweight TypeScript runtime and web console for connecting AI coding clients to local repositories with a deliberately short, low-latency execution path.
+
+> Status: early development / MVP.
+
+## Why
+
+WebCodex demonstrates a strong Server → Runner → Project trust boundary. Web Harness keeps that principle while optimizing for a lighter TypeScript stack and faster same-machine interaction:
+
+- **Direct local mode** removes the extra Server → Runner hop when both live on one workstation.
+- **Remote mode** uses one persistent WebSocket with MessagePack binary frames.
+- `TCP_NODELAY`, keepalive, bounded frames, and disabled per-message compression keep interactive requests responsive.
+- **Preact + Vite** provides a small web UI instead of requiring a desktop shell.
+- **VitePress + GitHub Pages** provides a standard public documentation site.
+
+## Architecture
+
+```text
+Local (fastest)
+AI client -> HTTP API -> in-process tool runtime -> repository
+                   -> WebSocket -> web console
+
+Remote
+AI client -> HTTP API -> server -> persistent WS/MessagePack -> runner -> repository
+                             -> WebSocket -> web console
+```
+
+## Quick start
+
+```bash
+corepack enable
+pnpm install
+cp .env.example .env
+WEB_HARNESS_PROJECT_ROOT=/path/to/project pnpm dev
+```
+
+Open `http://127.0.0.1:4142` for the web console.
+
+## Included tools
+
+- `project.info`
+- `fs.list`
+- `fs.read`
+- `fs.write`
+- `git.status`
+- `git.diff`
+- `process.run` (argv based; no implicit shell)
+
+## Repository layout
+
+```text
+apps/server       runtime server + optional remote runner
+apps/web          Preact web console
+packages/protocol typed MessagePack wire protocol
+docs              VitePress documentation
+.github            CI, Pages, issue/PR automation
+```
+
+## Development
+
+```bash
+pnpm dev
+pnpm check
+pnpm docs:dev
+```
+
+## Documentation
+
+The docs site lives in `docs/` and is deployed with `.github/workflows/pages.yml`.
+
+Before publishing, replace the placeholder GitHub URL in `docs/.vitepress/config.ts` and verify the Pages base path matches the final repository name.
+
+## Security
+
+This runtime can modify files and execute developer commands inside the configured project root. Read [SECURITY.md](SECURITY.md) and the [security guide](docs/guide/security.md) before exposing it outside loopback.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
