@@ -38,6 +38,24 @@ The benchmark performs sequential authenticated `GET /api/status` requests and r
 
 A 200-request local-mode run on the development Mac during the 2026-09-17 validation measured approximately **0.68 ms p50**, **1.62 ms p95**, and **3.99 ms p99**. Treat this as a development baseline rather than a universal performance claim; repeat the benchmark on the target host before drawing conclusions.
 
+## Reproducible tool-call benchmark
+
+With the same local runtime running, measure representative tool calls through the REST adapter:
+
+```bash
+WEB_HARNESS_URL=http://127.0.0.1:4149 \
+WEB_HARNESS_TOKEN=benchmark-secret \
+ITERATIONS=50 \
+WARMUP_ITERATIONS=5 \
+pnpm bench:tools
+```
+
+The tool benchmark exercises `project.info`, `fs.read`, `git.status`, and `process.run` with `git --version`. `fs.read` defaults to `README.md`; set `BENCH_FILE` to another existing 1–16 KiB project-relative file when needed. Warm-up calls are excluded from the reported samples.
+
+Use this benchmark to detect regressions in the actual execution path, not just HTTP routing. In particular, process-spawn latency should be evaluated separately from in-process tools because it is dominated by operating-system process creation and the executable itself.
+
+A 50-sample local-mode run on the same development Mac measured these p50 latencies: `project.info` **1.58 ms**, `fs.read` **1.84 ms**, `git.status` **26.19 ms**, and `process.run` (`git --version`) **20.35 ms**. The corresponding p95 values were approximately **3.05 ms**, **3.30 ms**, **33.78 ms**, and **21.57 ms**. These are machine-specific development baselines, not product-wide guarantees.
+
 ## What to benchmark
 
 Track p50/p95/p99 for:
