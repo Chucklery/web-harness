@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { decodeFrame, encodeFrame, type ToolName, type ToolResult, type WireFrame } from '@web-harness/protocol'
+import {
+  decodeFrame,
+  encodeFrame,
+  type ToolName,
+  type ToolResult,
+  type WireFrame,
+} from '@web-harness/protocol'
 import WebSocket from 'ws'
 
 interface PendingRequest {
@@ -31,7 +37,10 @@ export class RemoteRunnerBridge {
   detach(socket: WebSocket, reason?: Error): boolean
   detach(socketOrReason?: WebSocket | Error, maybeReason?: Error): boolean {
     const socket = socketOrReason instanceof Error ? undefined : socketOrReason
-    const reason = socketOrReason instanceof Error ? socketOrReason : maybeReason ?? new Error('Runner disconnected')
+    const reason =
+      socketOrReason instanceof Error
+        ? socketOrReason
+        : (maybeReason ?? new Error('Runner disconnected'))
     if (socket && socket !== this.socket) return false
 
     this.socket = undefined

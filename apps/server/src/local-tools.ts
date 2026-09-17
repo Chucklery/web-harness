@@ -27,7 +27,11 @@ export class LocalToolRuntime {
       case 'git.status':
         return this.git(['status', '--short', '--branch'])
       case 'git.diff':
-        return this.git(['diff', '--', ...(Array.isArray(input.paths) ? input.paths.map(String) : [])])
+        return this.git([
+          'diff',
+          '--',
+          ...(Array.isArray(input.paths) ? input.paths.map(String) : []),
+        ])
       case 'process.run':
         return this.runProcess(input)
     }

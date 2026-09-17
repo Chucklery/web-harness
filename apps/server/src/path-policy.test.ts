@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -32,7 +32,10 @@ test('ProjectPathPolicy rejects reads through a symlink that escapes the root', 
   }
 
   const policy = new ProjectPathPolicy(root)
-  await assert.rejects(() => policy.existing('escape/secret.txt'), /escapes configured project root/)
+  await assert.rejects(
+    () => policy.existing('escape/secret.txt'),
+    /escapes configured project root/,
+  )
 })
 
 test('ProjectPathPolicy rejects writes through an existing symlink that escapes the root', async (t) => {
