@@ -21,11 +21,18 @@ test('bearer token comparison rejects mismatches', () => {
   assert.equal(isAuthorized(request({ authorization: 'Bearer wrong' }), 'secret'), false)
 })
 
-test('UI websocket accepts a base64url token through its subprotocol header', () => {
+test('UI websocket requires the stable protocol and a base64url token', () => {
   const encoded = Buffer.from('secret').toString('base64url')
   assert.equal(
-    isUiWebSocketAuthorized(request({ 'sec-websocket-protocol': `auth.${encoded}` }), 'secret'),
+    isUiWebSocketAuthorized(
+      request({ 'sec-websocket-protocol': `web-harness.v1, auth.${encoded}` }),
+      'secret',
+    ),
     true,
+  )
+  assert.equal(
+    isUiWebSocketAuthorized(request({ 'sec-websocket-protocol': `auth.${encoded}` }), 'secret'),
+    false,
   )
   assert.equal(isUiWebSocketAuthorized(request({}), 'secret'), false)
 })

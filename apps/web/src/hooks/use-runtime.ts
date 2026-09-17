@@ -61,7 +61,9 @@ export function useRuntime() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
       const url = `${protocol}//${location.host}/ws/ui`
       const token = getSessionToken()
-      socket = token ? new WebSocket(url, [`auth.${encodeBase64Url(token)}`]) : new WebSocket(url)
+      socket = token
+        ? new WebSocket(url, ['web-harness.v1', `auth.${encodeBase64Url(token)}`])
+        : new WebSocket(url)
 
       socket.addEventListener('open', () => {
         retryMs = 200

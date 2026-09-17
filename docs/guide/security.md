@@ -8,7 +8,7 @@ Web Harness can read, modify, and execute code inside a configured repository. T
 - File paths and process working directories are resolved against that root and traversal is rejected.
 - Existing paths are canonicalized before use, so a symlink inside the repository cannot silently redirect reads, writes, or process working directories outside the configured root.
 - Runtime status, REST tool calls, MCP requests, remote runner connections, and the Web UI event socket require the configured token.
-- The browser console keeps its token in `sessionStorage` only. WebSocket authentication is carried in an `auth.<base64url-token>` subprotocol because browser WebSocket APIs cannot set an `Authorization` header.
+- The browser console keeps its token in `sessionStorage` only. For the WebSocket handshake it offers a fixed `web-harness.v1` subprotocol plus an `auth.<base64url-token>` credential; the server selects and echoes only the fixed protocol, so the credential is not reflected in the handshake response.
 - The default `change-me` token is accepted only from loopback connections, including IPv4-mapped loopback addresses.
 - `process.run` uses an argv API rather than an implicit shell.
 - Request sizes, file sizes, process output, and execution time are bounded.

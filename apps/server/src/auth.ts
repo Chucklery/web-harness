@@ -1,6 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 
+export const UI_WEBSOCKET_PROTOCOL = 'web-harness.v1'
+
 export function isAuthorized(request: IncomingMessage, expectedToken: string): boolean {
   if (usesLoopbackDefault(request, expectedToken)) return true
 
@@ -13,10 +15,11 @@ export function isUiWebSocketAuthorized(request: IncomingMessage, expectedToken:
   if (usesLoopbackDefault(request, expectedToken)) return true
 
   const header = request.headers['sec-websocket-protocol']
-  const protocols = Array.isArray(header) ? header : (header ?? '').split(',')
-  const authProtocol = protocols
-    .map((value) => value.trim())
-    .find((value) => value.startsWith('auth.'))
+  const protocols = (Array.isArray(header) ? header : (header ?? '').split(',')).map((value) =>
+    value.trim(),
+  )
+  if (!protocols.includes(UI_WEBSOCKET_PROTOCOL)) return false
+  const authProtocol = protocols.find((value) => value.startsWith('auth.'))
   if (!authProtocol) return false
 
   try {

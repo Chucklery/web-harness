@@ -14,7 +14,7 @@ import {
   type WireFrame,
 } from '@web-harness/protocol'
 import WebSocket, { type RawData, WebSocketServer } from 'ws'
-import { isAuthorized, isUiWebSocketAuthorized } from './auth.js'
+import { isAuthorized, isUiWebSocketAuthorized, UI_WEBSOCKET_PROTOCOL } from './auth.js'
 import type { RuntimeConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
 import { createMcpHttpHandler, type McpHttpHandler } from './mcp.js'
@@ -44,6 +44,8 @@ export class HarnessServer {
     noServer: true,
     perMessageDeflate: false,
     maxPayload: 256 * 1024,
+    handleProtocols: (protocols) =>
+      protocols.has(UI_WEBSOCKET_PROTOCOL) ? UI_WEBSOCKET_PROTOCOL : false,
   })
 
   constructor(private readonly config: RuntimeConfig) {
