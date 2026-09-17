@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { PROTOCOL_VERSION, decodeFrame, encodeFrame, type ToolRequest, type ToolResult, type WireFrame } from '@web-harness/protocol'
+import {
+  decodeFrame,
+  encodeFrame,
+  PROTOCOL_VERSION,
+  type ToolRequest,
+  type ToolResult,
+  type WireFrame,
+} from '@web-harness/protocol'
 import WebSocket, { type RawData } from 'ws'
 import { loadConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
@@ -7,7 +14,8 @@ import { LocalToolRuntime } from './local-tools.js'
 const config = loadConfig()
 const runtime = new LocalToolRuntime(config.projectRoot)
 const runnerId = process.env.WEB_HARNESS_RUNNER_ID?.trim() || randomUUID()
-const serverUrl = process.env.WEB_HARNESS_SERVER_URL?.trim() || `ws://${config.host}:${config.port}/ws/runner`
+const serverUrl =
+  process.env.WEB_HARNESS_SERVER_URL?.trim() || `ws://${config.host}:${config.port}/ws/runner`
 
 let retryMs = 100
 
@@ -41,7 +49,8 @@ function connect(): void {
     try {
       const frame = decodeFrame(toBytes(raw))
       if (frame.type === 'tool.request') await handleTool(socket, frame)
-      if (frame.type === 'ping') socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
+      if (frame.type === 'ping')
+        socket.send(encodeFrame({ type: 'pong', at: frame.at }), { binary: true })
     } catch {
       socket.close(1002, 'invalid protocol frame')
     }
@@ -68,7 +77,10 @@ async function handleTool(socket: WebSocket, request: ToolRequest): Promise<void
       type: 'tool.result',
       id: request.id,
       ok: false,
-      error: { code: 'TOOL_ERROR', message: error instanceof Error ? error.message : String(error) },
+      error: {
+        code: 'TOOL_ERROR',
+        message: error instanceof Error ? error.message : String(error),
+      },
       durationMs: Math.round((performance.now() - started) * 100) / 100,
     }
   }
@@ -89,7 +101,7 @@ function toBytes(raw: RawData): Uint8Array {
     return new Uint8Array(joined.buffer, joined.byteOffset, joined.byteLength)
   }
   if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
-  return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  throw new TypeError('Unsupported WebSocket payload')
 }
 
 connect()

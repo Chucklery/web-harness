@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { toNodeHandler } from '@modelcontextprotocol/node'
+import { type NodeIncomingMessageLike, toNodeHandler } from '@modelcontextprotocol/node'
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
 import type { ToolName } from '@web-harness/protocol'
 import * as z from 'zod/v4'
@@ -10,17 +10,20 @@ export type ExecuteTool = (
   surface: 'mcp',
 ) => Promise<{ result: unknown; durationMs: number }>
 
-export type McpHttpHandler = (
-  request: IncomingMessage,
-  response: ServerResponse,
-) => Promise<void>
+export type McpHttpHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
 
 export function createMcpHttpHandler(executeTool: ExecuteTool): McpHttpHandler {
   const handler = createMcpHandler(() => buildMcpServer(executeTool))
   const nodeHandler = toNodeHandler(handler)
 
   return async (request, response) => {
-    await nodeHandler(request, response)
+    const nodeRequest: NodeIncomingMessageLike = {
+      headers: request.headers,
+      [Symbol.asyncIterator]: () => request[Symbol.asyncIterator](),
+      ...(request.method !== undefined ? { method: request.method } : {}),
+      ...(request.url !== undefined ? { url: request.url } : {}),
+    }
+    await nodeHandler(nodeRequest, response)
   }
 }
 
@@ -89,7 +92,12 @@ function buildMcpServer(executeTool: ExecuteTool): McpServer {
       title: 'Write project file',
       description: 'Replace a UTF-8 file inside the configured project root, up to 2 MiB.',
       inputSchema: z.object({ path: z.string().min(1), content: z.string() }),
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ path, content }) => call('fs.write', { path, content }),
   )
