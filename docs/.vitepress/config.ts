@@ -29,6 +29,11 @@ export default defineConfig({
       },
     ],
     search: { provider: 'local' },
+    socialLinks: [{ icon: 'github', link: 'https://github.com/Chucklery/web-harness' }],
+    editLink: {
+      pattern: 'https://github.com/Chucklery/web-harness/edit/main/docs/:path',
+      text: 'Edit this page on GitHub',
+    },
     footer: { message: 'Released under the Apache-2.0 License.' },
   },
 })

@@ -72,9 +72,9 @@ pnpm docs:dev
 
 ## Documentation
 
-The docs site lives in `docs/` and is deployed with `.github/workflows/pages.yml`.
+The docs site lives in `docs/` and is deployed with `.github/workflows/pages.yml`. The VitePress navigation links back to the GitHub repository and exposes per-page edit links.
 
-Before publishing, replace the placeholder GitHub URL in `docs/.vitepress/config.ts` and verify the Pages base path matches the final repository name.
+GitHub Pages builds use the repository name as `DOCS_BASE`, so project-site deployments resolve correctly without hard-coding the account name.
 
 ## Security
 
