@@ -1,10 +1,13 @@
 const base = process.env.WEB_HARNESS_URL ?? 'http://127.0.0.1:4141'
 const iterations = Number(process.env.ITERATIONS ?? 200)
+const token = process.env.WEB_HARNESS_TOKEN?.trim()
 const samples = []
 
 for (let index = 0; index < iterations; index += 1) {
   const start = performance.now()
-  const response = await fetch(`${base}/api/status`)
+  const response = await fetch(`${base}/api/status`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   await response.arrayBuffer()
   samples.push(performance.now() - start)

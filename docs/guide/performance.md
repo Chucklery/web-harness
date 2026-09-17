@@ -14,6 +14,30 @@ The performance target is **interactive latency**, not synthetic throughput alon
 8. **Bounded UI work.** The web console retains only the latest 100 activity events.
 9. **Fail fast under transport pressure.** A runner link with more than 1 MiB already buffered rejects new work instead of turning interactive calls into a long hidden queue.
 
+## Reproducible local status benchmark
+
+Start a local runtime with an explicit project and token, then point the benchmark at the same endpoint:
+
+```bash
+WEB_HARNESS_PORT=4149 \
+WEB_HARNESS_PROJECT_ROOT=/path/to/project \
+WEB_HARNESS_TOKEN=benchmark-secret \
+pnpm --filter @web-harness/server start
+```
+
+In a second terminal:
+
+```bash
+WEB_HARNESS_URL=http://127.0.0.1:4149 \
+WEB_HARNESS_TOKEN=benchmark-secret \
+ITERATIONS=200 \
+pnpm bench:http
+```
+
+The benchmark performs sequential authenticated `GET /api/status` requests and reports mean, p50, p95, and p99 wall-clock round-trip latency. Keep the machine, Node version, iteration count, and runtime mode constant when comparing changes.
+
+A 200-request local-mode run on the development Mac during the 2026-09-17 validation measured approximately **0.68 ms p50**, **1.62 ms p95**, and **3.99 ms p99**. Treat this as a development baseline rather than a universal performance claim; repeat the benchmark on the target host before drawing conclusions.
+
 ## What to benchmark
 
 Track p50/p95/p99 for:
