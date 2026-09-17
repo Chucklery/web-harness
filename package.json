@@ -23,7 +23,8 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "bench:http": "node scripts/bench-http.mjs",
-    "bench:tools": "node scripts/bench-tools.mjs"
+    "bench:tools": "node scripts/bench-tools.mjs",
+    "bench:remote": "node scripts/bench-remote.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

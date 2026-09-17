@@ -56,6 +56,20 @@ Use this benchmark to detect regressions in the actual execution path, not just 
 
 A 50-sample local-mode run on the same development Mac measured these p50 latencies: `project.info` **1.58 ms**, `fs.read` **1.84 ms**, `git.status` **26.19 ms**, and `process.run` (`git --version`) **20.35 ms**. The corresponding p95 values were approximately **3.05 ms**, **3.30 ms**, **33.78 ms**, and **21.57 ms**. These are machine-specific development baselines, not product-wide guarantees.
 
+## Reproducible remote-runner benchmark
+
+Run the remote-mode server and runner lifecycle in one benchmark command:
+
+```bash
+ITERATIONS=50 pnpm bench:remote
+```
+
+The benchmark starts a server in remote mode on loopback, waits for it to become reachable, starts a runner for the current repository, measures runner spawn-to-ready time, then measures `project.info` round trips across the Server → WebSocket/MessagePack → Runner path. `WEB_HARNESS_BENCH_PORT` can override the default benchmark port `4150`.
+
+This loopback benchmark isolates protocol/bridge overhead from WAN latency. For deployment decisions, repeat equivalent measurements across the intended network path and record both runner-ready time and tool-call p50/p95/p99.
+
+Two 50-sample loopback runs on the development Mac observed runner spawn-to-ready between approximately **418–549 ms**. Remote `project.info` measured **1.83–1.96 ms p50** and **3.36–3.49 ms p95** across those runs. These values measure the local Server → Runner bridge rather than real WAN conditions, and the runner-ready spread shows why repeated samples matter.
+
 ## What to benchmark
 
 Track p50/p95/p99 for:
