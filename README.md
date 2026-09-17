@@ -12,6 +12,7 @@ WebCodex demonstrates a strong Server → Runner → Project trust boundary. Web
 - **Remote mode** uses one persistent WebSocket with MessagePack binary frames.
 - `TCP_NODELAY`, keepalive, bounded frames, and disabled per-message compression keep interactive requests responsive.
 - **Preact + Vite** provides a small web UI instead of requiring a desktop shell.
+- **MCP 2026-07-28** is served through the official TypeScript SDK, with its stateless compatibility path for 2025-era clients.
 - **VitePress + GitHub Pages** provides a standard public documentation site.
 
 ## Architecture
@@ -37,6 +38,8 @@ WEB_HARNESS_PROJECT_ROOT=/path/to/project pnpm dev
 
 Open `http://127.0.0.1:4142` for the web console.
 
+MCP clients connect to `http://127.0.0.1:4141/mcp` with `Authorization: Bearer <WEB_HARNESS_TOKEN>`.
+
 ## Included tools
 
 - `project.info`
@@ -46,6 +49,8 @@ Open `http://127.0.0.1:4142` for the web console.
 - `git.status`
 - `git.diff`
 - `process.run` (argv based; no implicit shell)
+
+The same tools are exposed to MCP as `project_info`, `fs_list`, `fs_read`, `fs_write`, `git_status`, `git_diff`, and `process_run`.
 
 ## Repository layout
 

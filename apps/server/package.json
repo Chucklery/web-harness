@@ -12,8 +12,11 @@
     "runner": "tsx src/runner.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@web-harness/protocol": "workspace:*",
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -28,7 +28,10 @@ pnpm dev
 ```
 
 - Runtime API: `http://127.0.0.1:4141`
+- MCP endpoint: `http://127.0.0.1:4141/mcp`
 - Web console: `http://127.0.0.1:4142`
+
+MCP requests use the configured token as a bearer credential. See [MCP clients](./mcp.md) for the tool map and protocol notes.
 
 ## Production build
 

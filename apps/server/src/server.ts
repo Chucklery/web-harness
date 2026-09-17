@@ -16,6 +16,7 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import { isAuthorized } from './auth.js'
 import type { RuntimeConfig } from './config.js'
 import { LocalToolRuntime } from './local-tools.js'
+import { createMcpHttpHandler, type McpHttpHandler } from './mcp.js'
 import { RemoteRunnerBridge } from './remote-runner.js'
 
 const VERSION = '0.1.0'
@@ -23,6 +24,7 @@ const startedAt = Date.now()
 
 export class HarnessServer {
   private readonly localRuntime: LocalToolRuntime
+  private readonly mcpHandler: McpHttpHandler
   private readonly remoteBridge = new RemoteRunnerBridge()
   private readonly uiSockets = new Set<WebSocket>()
   private readonly server = createServer((request, response) => {
@@ -37,6 +39,11 @@ export class HarnessServer {
 
   constructor(private readonly config: RuntimeConfig) {
     this.localRuntime = new LocalToolRuntime(config.projectRoot)
+    this.mcpHandler = createMcpHttpHandler((tool, input, surface) =>
+      this.executeTool(tool, input, surface),
+    )
+    this.server.keepAliveTimeout = 60_000
+    this.server.headersTimeout = 65_000
     this.configureUpgrade()
     this.configureRunnerWebSocket()
     this.configureUiWebSocket()
@@ -160,6 +167,13 @@ export class HarnessServer {
       return this.json(response, 200, this.status())
     }
 
+    if (url.pathname === '/mcp') {
+      if (!isAuthorized(request, this.config.token)) {
+        return this.json(response, 401, { error: 'unauthorized' })
+      }
+      return this.mcpHandler(request, response)
+    }
+
     if (request.method === 'POST' && url.pathname.startsWith('/api/tools/')) {
       if (!isAuthorized(request, this.config.token)) return this.json(response, 401, { error: 'unauthorized' })
       return this.handleToolRequest(request, response, decodeURIComponent(url.pathname.slice('/api/tools/'.length)))
@@ -177,20 +191,52 @@ export class HarnessServer {
     if (!isToolName(rawTool)) return this.json(response, 404, { error: 'unknown_tool' })
 
     const tool = rawTool
-    const started = performance.now()
-    this.broadcast({ type: 'ui.event', event: 'tool.start', at: Date.now(), detail: { tool } })
 
     try {
       const input = await this.readJsonBody(request)
-      const result = this.config.mode === 'local' ? await this.localRuntime.execute(tool, input) : await this.remoteBridge.execute(tool, input)
-      const durationMs = Math.round((performance.now() - started) * 100) / 100
-      this.broadcast({ type: 'ui.event', event: 'tool.finish', at: Date.now(), detail: { tool, durationMs, ok: true } })
-      this.json(response, 200, { ok: true, result, durationMs })
+      const output = await this.executeTool(tool, input, 'rest')
+      this.json(response, 200, { ok: true, ...output })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      const durationMs = Math.round((performance.now() - started) * 100) / 100
-      this.broadcast({ type: 'ui.event', event: 'tool.finish', at: Date.now(), detail: { tool, durationMs, ok: false } })
-      this.json(response, 400, { ok: false, error: message, durationMs })
+      this.json(response, 400, { ok: false, error: message })
+    }
+  }
+
+  private async executeTool(
+    tool: Parameters<LocalToolRuntime['execute']>[0],
+    input: Record<string, unknown>,
+    surface: 'rest' | 'mcp',
+  ): Promise<{ result: unknown; durationMs: number }> {
+    const started = performance.now()
+    this.broadcast({
+      type: 'ui.event',
+      event: 'tool.start',
+      at: Date.now(),
+      detail: { tool, surface },
+    })
+
+    try {
+      const result =
+        this.config.mode === 'local'
+          ? await this.localRuntime.execute(tool, input)
+          : await this.remoteBridge.execute(tool, input)
+      const durationMs = elapsedMs(started)
+      this.broadcast({
+        type: 'ui.event',
+        event: 'tool.finish',
+        at: Date.now(),
+        detail: { tool, surface, durationMs, ok: true },
+      })
+      return { result, durationMs }
+    } catch (error) {
+      const durationMs = elapsedMs(started)
+      this.broadcast({
+        type: 'ui.event',
+        event: 'tool.finish',
+        at: Date.now(),
+        detail: { tool, surface, durationMs, ok: false },
+      })
+      throw error
     }
   }
 
@@ -271,4 +317,8 @@ function toBytes(raw: RawData): Uint8Array {
   }
   if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
   return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+}
+
+function elapsedMs(started: number): number {
+  return Math.round((performance.now() - started) * 100) / 100
 }

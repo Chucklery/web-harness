@@ -10,6 +10,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Architecture', link: '/guide/architecture' },
+      { text: 'MCP', link: '/guide/mcp' },
       { text: 'Performance', link: '/guide/performance' },
       { text: 'Security', link: '/guide/security' },
     ],
@@ -19,6 +20,7 @@ export default defineConfig({
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
           { text: 'Architecture', link: '/guide/architecture' },
+          { text: 'MCP clients', link: '/guide/mcp' },
           { text: 'Performance', link: '/guide/performance' },
           { text: 'Protocol', link: '/guide/protocol' },
           { text: 'Security', link: '/guide/security' },
